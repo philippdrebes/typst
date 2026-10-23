@@ -3,6 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use comemo::Tracked;
 use ecow::eco_format;
+use image::ImageEncoder;
+use image::codecs::png::PngEncoder;
 use rustc_hash::FxHashMap;
 use siphasher::sip128::{Hasher128, SipHasher13};
 use typst_syntax::FileId;
@@ -18,7 +20,7 @@ use crate::text::{
     Font, FontBook, FontFlags, FontStretch, FontStyle, FontVariant, FontWeight,
 };
 use crate::visualize::VectorFormat;
-use crate::visualize::image::raster::{ExchangeFormat, RasterFormat};
+use crate::visualize::image::raster::{ExchangeFormat, RasterFormat, RasterImage};
 use crate::visualize::image::{ImageFormat, determine_format_from_path};
 
 /// A decoded SVG.
@@ -507,6 +509,9 @@ impl<'a> ImageResolver<'a> {
                                 ExchangeFormat::Webp => {
                                     Ok(usvg::ImageKind::WEBP(arc_data))
                                 }
+                                ExchangeFormat::Jxl => {
+                                    Ok(usvg::ImageKind::PNG(jxl_to_png(&arc_data)?))
+                                }
                             }
                         }
                         RasterFormat::Pixel(_) => {
@@ -529,4 +534,19 @@ impl<'a> ImageResolver<'a> {
             }),
         }
     }
+}
+
+/// Converts a JPEG XL image to PNG, since usvg can't decode JPEG XL.
+fn jxl_to_png(data: &[u8]) -> StrResult<Arc<Vec<u8>>> {
+    let raster = RasterImage::plain(Bytes::new(data.to_vec()), ExchangeFormat::Jxl)?;
+    let mut buf = vec![];
+    let mut encoder = PngEncoder::new(&mut buf);
+    if let Some(icc) = raster.icc() {
+        encoder.set_icc_profile(icc.to_vec()).ok();
+    }
+    raster
+        .dynamic()
+        .write_with_encoder(encoder)
+        .map_err(|err| eco_format!("failed to encode image as PNG ({err})"))?;
+    Ok(Arc::new(buf))
 }

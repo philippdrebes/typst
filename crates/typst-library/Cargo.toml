@@ -37,6 +37,7 @@ icu_collator = { workspace = true }
 icu_properties = { workspace = true }
 image = { workspace = true }
 indexmap = { workspace = true }
+jxl-oxide = { workspace = true }
 kamadak-exif = { workspace = true }
 kurbo = { workspace = true }
 libm = { workspace = true }
