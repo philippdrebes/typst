@@ -29,6 +29,7 @@ flate2 = { workspace = true }
 image = { workspace = true }
 indexmap = { workspace = true }
 infer = { workspace = true }
+jxl-oxide = { workspace = true }
 krilla = { workspace = true }
 krilla-svg = { workspace = true }
 rustc-hash = { workspace = true }
