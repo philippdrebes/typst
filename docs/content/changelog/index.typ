@@ -25,6 +25,7 @@
   "0.14.2": "12.12.2025",
   "0.15.0": "15.06.2026",
   "0.15.1": "17.07.2026",
+  "0.16.0": none,
 )
 
 // Converts the human-editable format above into typed (version, datetime)

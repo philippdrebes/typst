@@ -110,7 +110,7 @@ pub struct ImageElem {
     /// format automatically, but that's not always possible).
     ///
     /// Supported formats are `{"png"}`, `{"jpg"}`, `{"gif"}`, `{"svg"}`,
-    /// `{"pdf"}`, `{"webp"}` as well as raw pixel data.
+    /// `{"pdf"}`, `{"webp"}`, `{"jxl"}` as well as raw pixel data.
     ///
     /// Note that several restrictions apply when using PDF files as images:
     ///
@@ -373,6 +373,7 @@ fn determine_format_from_path(path: &VirtualPath) -> Option<ImageFormat> {
         "jpg" | "jpeg" => Some(ExchangeFormat::Jpg.into()),
         "gif" => Some(ExchangeFormat::Gif.into()),
         "webp" => Some(ExchangeFormat::Webp.into()),
+        "jxl" => Some(ExchangeFormat::Jxl.into()),
         // Vector formats
         "svg" | "svgz" => Some(VectorFormat::Svg.into()),
         "pdf" => Some(VectorFormat::Pdf.into()),

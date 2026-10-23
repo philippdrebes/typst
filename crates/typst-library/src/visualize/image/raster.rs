@@ -10,8 +10,10 @@ use image::codecs::gif::GifDecoder;
 use image::codecs::jpeg::JpegDecoder;
 use image::codecs::png::PngDecoder;
 use image::codecs::webp::WebPDecoder;
+use image::error::{LimitError, LimitErrorKind};
 use image::{
-    DynamicImage, ImageBuffer, ImageDecoder, ImageResult, Limits, Pixel, guess_format,
+    DynamicImage, ImageBuffer, ImageDecoder, ImageError, ImageResult, Limits, Pixel,
+    guess_format,
 };
 
 /// A decoded raster image.
@@ -79,12 +81,20 @@ impl RasterImage {
                     ExchangeFormat::Png => decode(PngDecoder::new(cursor), icc),
                     ExchangeFormat::Gif => decode(GifDecoder::new(cursor), icc),
                     ExchangeFormat::Webp => decode(WebPDecoder::new(cursor), icc),
+                    ExchangeFormat::Jxl => decode_jxl(&data, icc),
                 }
                 .map_err(format_image_error)?;
 
-                let exif = exif::Reader::new()
-                    .read_from_container(&mut std::io::Cursor::new(&data))
-                    .ok();
+                // JPEG XL stores the orientation in its image header (which the
+                // decoder already applied) and its Exif metadata must not be
+                // used for orientation.
+                let exif = (format != ExchangeFormat::Jxl)
+                    .then(|| {
+                        exif::Reader::new()
+                            .read_from_container(&mut std::io::Cursor::new(&data))
+                            .ok()
+                    })
+                    .flatten();
 
                 // Apply rotation from EXIF metadata.
                 if let Some(rotation) = exif.as_ref().and_then(exif_rotation) {
@@ -249,24 +259,34 @@ pub enum ExchangeFormat {
     Gif,
     /// Raster format that supports both lossy and lossless compression.
     Webp,
+    /// Raster format (JPEG XL) with lossy and lossless compression, which can
+    /// also losslessly recompress JPEGs. Typst can load animated JPEG XL
+    /// images, but they will become static.
+    Jxl,
 }
 
 impl ExchangeFormat {
     /// Try to detect the format of data in a buffer.
     pub fn detect(data: &[u8]) -> Option<Self> {
+        if is_jxl(data) {
+            return Some(Self::Jxl);
+        }
         let format = guess_format(data).ok()?;
         format.try_into().ok()
     }
 }
 
-impl From<ExchangeFormat> for image::ImageFormat {
-    fn from(format: ExchangeFormat) -> Self {
-        match format {
+impl TryFrom<ExchangeFormat> for image::ImageFormat {
+    type Error = EcoString;
+
+    fn try_from(format: ExchangeFormat) -> StrResult<Self> {
+        Ok(match format {
             ExchangeFormat::Png => image::ImageFormat::Png,
             ExchangeFormat::Jpg => image::ImageFormat::Jpeg,
             ExchangeFormat::Gif => image::ImageFormat::Gif,
             ExchangeFormat::Webp => image::ImageFormat::WebP,
-        }
+            ExchangeFormat::Jxl => bail!("format not supported by the image crate"),
+        })
     }
 }
 
@@ -330,6 +350,115 @@ impl From<PixelFormat> for Dict {
             "height" => format.height,
         }
     }
+}
+
+/// Checks whether the data starts with the signature of a bare JPEG XL
+/// codestream or of a JPEG XL container.
+fn is_jxl(data: &[u8]) -> bool {
+    data.starts_with(&[0xFF, 0x0A])
+        || data.starts_with(&[
+            0x00, 0x00, 0x00, 0x0C, b'J', b'X', b'L', b' ', 0x0D, 0x0A, 0x87, 0x0A,
+        ])
+}
+
+/// Decodes a JPEG XL image into a dynamic image and an ICC profile.
+///
+/// Images with an embedded ICC profile are decoded into the color space of
+/// that profile, which is returned alongside them, just like for PNG and
+/// JPEG. Images that instead use one of JPEG XL's built-in color encodings
+/// (e.g. Display P3, linear light or HDR) are converted to sRGB (tone-mapping
+/// HDR content) since the exported formats can't express those otherwise.
+///
+/// Animated images are decoded to their first frame. Limits are enforced the
+/// same way as for the other formats: The output buffer and the decoder's
+/// internal buffers share the default allocation limit.
+fn decode_jxl(
+    data: &[u8],
+    icc: Smart<Bytes>,
+) -> ImageResult<(DynamicImage, Option<Bytes>)> {
+    use jxl_oxide::color::ColourEncoding;
+    use jxl_oxide::{
+        AllocTracker, EnumColourEncoding, FrameBufferSample, JxlImage, PixelFormat,
+        Render,
+    };
+
+    fn error(err: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> ImageError {
+        ImageError::IoError(io::Error::new(io::ErrorKind::InvalidData, err))
+    }
+
+    fn read<P>(render: &Render) -> ImageResult<ImageBuffer<P, Vec<P::Subpixel>>>
+    where
+        P: Pixel,
+        P::Subpixel: FrameBufferSample + Default,
+    {
+        let mut stream = render.stream();
+        let (width, height) = (stream.width(), stream.height());
+        let len = width as usize * height as usize * stream.channels() as usize;
+        let mut buf = vec![P::Subpixel::default(); len];
+        stream.write_to_buffer(&mut buf);
+        ImageBuffer::from_raw(width, height, buf)
+            .ok_or_else(|| error("invalid image size"))
+    }
+
+    let mut limits = Limits::default();
+    let max_alloc = limits.max_alloc.and_then(|max| usize::try_from(max).ok());
+    let tracker = AllocTracker::with_limit(max_alloc.unwrap_or(usize::MAX));
+    let mut image = JxlImage::builder()
+        .alloc_tracker(tracker.clone())
+        .read(data)
+        .map_err(error)?;
+    if !image.is_loading_done() {
+        return Err(error("unexpected end of file"));
+    }
+
+    let pixel_format = image.pixel_format();
+    let metadata = &image.image_header().metadata;
+    let wide = metadata.bit_depth.bits_per_sample() > 8;
+    let enum_intent = match &metadata.colour_encoding {
+        ColourEncoding::Enum(encoding) => Some(encoding.rendering_intent),
+        ColourEncoding::IccProfile(_) => None,
+    };
+    if let Some(intent) = enum_intent {
+        image.request_color_encoding(if pixel_format.is_grayscale() {
+            EnumColourEncoding::gray_srgb(intent)
+        } else {
+            EnumColourEncoding::srgb(intent)
+        });
+    }
+
+    // Reserve the output buffer from the allocation limit that is shared with
+    // the decoder's internal buffers.
+    let size = u64::from(image.width())
+        * u64::from(image.height())
+        * pixel_format.channels() as u64
+        * if wide { 2 } else { 1 };
+    limits.reserve(size)?;
+    tracker
+        .shrink_limit(usize::try_from(size).unwrap_or(usize::MAX))
+        .map_err(|_| {
+            ImageError::Limits(LimitError::from_kind(LimitErrorKind::InsufficientMemory))
+        })?;
+
+    let render = image.render_frame(0).map_err(error)?;
+    let dynamic = match (pixel_format, wide) {
+        (PixelFormat::Gray, false) => DynamicImage::ImageLuma8(read(&render)?),
+        (PixelFormat::Gray, true) => DynamicImage::ImageLuma16(read(&render)?),
+        (PixelFormat::Graya, false) => DynamicImage::ImageLumaA8(read(&render)?),
+        (PixelFormat::Graya, true) => DynamicImage::ImageLumaA16(read(&render)?),
+        (PixelFormat::Rgb, false) => DynamicImage::ImageRgb8(read(&render)?),
+        (PixelFormat::Rgb, true) => DynamicImage::ImageRgb16(read(&render)?),
+        (PixelFormat::Rgba, false) => DynamicImage::ImageRgba8(read(&render)?),
+        (PixelFormat::Rgba, true) => DynamicImage::ImageRgba16(read(&render)?),
+        (PixelFormat::Cmyk | PixelFormat::Cmyka, _) => {
+            return Err(error("CMYK images are not supported"));
+        }
+    };
+
+    let has_icc = enum_intent.is_none();
+    let icc = icc
+        .custom()
+        .or_else(|| has_icc.then(|| Bytes::new(image.rendered_icc())));
+    Ok((dynamic, icc))
 }
 
 /// Try to get the rotation from the EXIF metadata.

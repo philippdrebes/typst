@@ -40,3 +40,9 @@ name = "html"
 path = "src/bin/html.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "jxl"
+path = "src/bin/jxl.rs"
+test = false
+doc = false

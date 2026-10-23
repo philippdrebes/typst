@@ -9,7 +9,7 @@ use image::{ImageEncoder, codecs::png::PngEncoder};
 use typst_library::foundations::{Bytes, Smart};
 use typst_library::layout::{Abs, Axes};
 use typst_library::visualize::{
-    ExchangeFormat, Image, ImageKind, ImageScaling, PdfImage, RasterFormat,
+    ExchangeFormat, Image, ImageKind, ImageScaling, PdfImage, RasterFormat, RasterImage,
 };
 
 use crate::write::{SvgElem, SvgTransform, SvgWrite};
@@ -103,24 +103,16 @@ impl WebImage {
     pub fn new(image: &Image) -> WebImage {
         let (format, data) = match image.kind() {
             ImageKind::Raster(raster) => match raster.format() {
-                RasterFormat::Exchange(format) => (
-                    match format {
-                        ExchangeFormat::Png => WebImageFormat::Png,
-                        ExchangeFormat::Jpg => WebImageFormat::Jpg,
-                        ExchangeFormat::Gif => WebImageFormat::Gif,
-                        ExchangeFormat::Webp => WebImageFormat::Webp,
-                    },
-                    raster.data().clone(),
-                ),
-                RasterFormat::Pixel(_) => (WebImageFormat::Png, {
-                    let mut buf = vec![];
-                    let mut encoder = PngEncoder::new(&mut buf);
-                    if let Some(icc_profile) = raster.icc() {
-                        encoder.set_icc_profile(icc_profile.to_vec()).ok();
-                    }
-                    raster.dynamic().write_with_encoder(encoder).unwrap();
-                    Bytes::new(buf)
-                }),
+                RasterFormat::Exchange(format) => match format {
+                    ExchangeFormat::Png => (WebImageFormat::Png, raster.data().clone()),
+                    ExchangeFormat::Jpg => (WebImageFormat::Jpg, raster.data().clone()),
+                    ExchangeFormat::Gif => (WebImageFormat::Gif, raster.data().clone()),
+                    ExchangeFormat::Webp => (WebImageFormat::Webp, raster.data().clone()),
+                    // Browser support for JPEG XL is limited, so we convert
+                    // it to PNG.
+                    ExchangeFormat::Jxl => (WebImageFormat::Png, encode_png(raster)),
+                },
+                RasterFormat::Pixel(_) => (WebImageFormat::Png, encode_png(raster)),
             },
             ImageKind::Svg(svg) => (WebImageFormat::Svg, svg.data().clone()),
             ImageKind::Pdf(pdf) => {
@@ -140,6 +132,17 @@ impl WebImage {
         url.push_str(&data);
         url
     }
+}
+
+/// Encodes the decoded pixels of a raster image as a PNG.
+fn encode_png(raster: &RasterImage) -> Bytes {
+    let mut buf = vec![];
+    let mut encoder = PngEncoder::new(&mut buf);
+    if let Some(icc_profile) = raster.icc() {
+        encoder.set_icc_profile(icc_profile.to_vec()).ok();
+    }
+    raster.dynamic().write_with_encoder(encoder).unwrap();
+    Bytes::new(buf)
 }
 
 // Keep this in sync with `typst-png`!
