@@ -429,7 +429,7 @@ A #box(image("/assets/images/tiger.jpg", height: 1cm, width: 80%)) B
 --- image-png-but-pixmap-format eval ---
 #image(
   read("/assets/images/tiger.jpg", encoding: none),
-  // Error: 11-18 expected "png", "jpg", "gif", "webp", dictionary, "svg", "pdf", or auto
+  // Error: 11-18 expected "png", "jpg", "gif", "webp", "jxl", dictionary, "svg", "pdf", or auto
   format: "rgba8",
 )
 
@@ -506,3 +506,84 @@ A #box(image("/assets/images/tiger.jpg", height: 1cm, width: 80%)) B
   </svg>
   ```.text
 ))
+
+// The JPEG XL test images in `/tests/jxl-assets` belong into
+// `typst-dev-assets` (as `files/images/jxl`) and are only kept here until they
+// are available there.
+
+--- image-jxl-lossy paged ---
+// Load a lossy (VarDCT) 8-bit RGB JPEG XL image.
+#image("/tests/jxl-assets/lossy.jxl")
+
+--- image-jxl-lossless paged ---
+// Load a lossless (modular) 8-bit RGB JPEG XL image.
+#image("/tests/jxl-assets/lossless.jxl")
+
+--- image-jxl-alpha paged ---
+// Load an RGBA JPEG XL image.
+#set page(fill: gray)
+#image("/tests/jxl-assets/alpha.jxl")
+
+--- image-jxl-gray paged ---
+// Load a grayscale JPEG XL image.
+#image("/tests/jxl-assets/gray.jxl")
+
+--- image-jxl-hdr paged ---
+// Load a 16-bit HDR (Rec. 2100 PQ) and a 32-bit float (linear sRGB) JPEG XL
+// image. Both are mapped to sRGB.
+#image("/tests/jxl-assets/hdr-pq.jxl")
+#image("/tests/jxl-assets/float.jxl")
+
+--- image-jxl-icc paged ---
+// Load a JPEG XL image with an embedded ICC profile. The profile is kept and
+// embedded in the PDF, just like for PNG and JPEG.
+#image("/tests/jxl-assets/icc.jxl")
+
+--- image-jxl-orientation paged ---
+// Load JPEG XL images whose orientation is stored in the image header, both
+// for pixel data and for a recompressed JPEG. Both should be upright.
+#image("/tests/jxl-assets/orientation.jxl")
+#image("/tests/jxl-assets/orientation-recompressed.jxl")
+
+--- image-jxl-animated paged ---
+// Load an animated JPEG XL image. Only the first frame is shown.
+#image("/tests/jxl-assets/animated.jxl")
+
+--- image-jxl-recompressed paged ---
+// Load a losslessly recompressed JPEG.
+#image("/tests/jxl-assets/recompressed.jxl")
+
+--- image-jxl-detect-format paged ---
+// Detect JPEG XL from the data, both for a bare codestream and a container.
+#let codestream = read("/tests/jxl-assets/lossy.jxl", encoding: none)
+#let container = read("/tests/jxl-assets/recompressed.jxl", encoding: none)
+#test(codestream.slice(0, 2), bytes((0xff, 0x0a)))
+#test(container.slice(4, 8), bytes("JXL "))
+#image(codestream, width: 40%)
+#image(container, width: 40%)
+
+--- image-jxl-specify-format paged ---
+#image(read("/tests/jxl-assets/lossy.jxl", encoding: none), format: "jxl", width: 40%)
+
+--- image-jxl-svg-linked paged ---
+// JPEG XL images linked from an SVG are converted to PNG for usvg.
+#image("/tests/jxl-assets/linked.svg")
+
+--- image-jxl-html html ---
+// JPEG XL images are converted to PNG in HTML export.
+#image("/tests/jxl-assets/gray.jxl", alt: "A gray letter F")
+
+--- image-jxl-truncated paged ---
+#let data = read("/tests/jxl-assets/lossless.jxl", encoding: none)
+// Error: 2-38 failed to decode image (unexpected end of file)
+#image(data.slice(0, data.len() - 1))
+
+--- image-jxl-truncated-header paged ---
+// Error: 2-34 failed to decode image (reader ended before parsing image header)
+#image(bytes((0xff, 0x0a, 0x00)))
+
+--- image-jxl-corrupted paged ---
+#let data = read("/tests/jxl-assets/lossy.jxl", encoding: none)
+#let corrupted = data.slice(0, 40) + bytes((0xff, 0x00, 0xaa, 0x55)) + data.slice(44)
+// Error: 2-18 failed to decode image (frame error: modular stream error: entropy decoder error: distribution cluster has a hole; expected 8, actual 5)
+#image(corrupted)
