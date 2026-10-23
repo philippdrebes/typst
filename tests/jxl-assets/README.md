@@ -8,7 +8,8 @@ replace `/tests/jxl-assets/` with `/assets/images/jxl/` in
 `tests/suite/visualize/image.typ`.
 
 All images are synthetic and were generated from scratch with `generate.py`
-(which reproduces them byte for byte with `cjxl` v0.7.0). They are dedicated to
+(which reproduces them byte for byte with `cjxl` v0.7.0), except for
+`bad-jbrd.jxl`, which the fuzzer derived from `recompressed.jxl`. They are dedicated to
 the public domain (CC0).
 
 | File                           | Content                                               |
@@ -26,3 +27,4 @@ the public domain (CC0).
 | `recompressed.jxl`             | Losslessly recompressed `recompressed.jpg` (`jbrd`)   |
 | `recompressed.jpg`             | The original JPEG of `recompressed.jxl`               |
 | `linked.svg`                   | SVG linking to `lossless.jxl`                         |
+| `bad-jbrd.jxl`                 | Fuzzer-mutated `recompressed.jxl` with malformed JPEG reconstruction data (not produced by `generate.py`) |

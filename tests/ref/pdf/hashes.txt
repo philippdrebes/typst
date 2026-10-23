@@ -640,6 +640,7 @@ b68fe0d021f382a465a2b8fa087a6f06 hyphenate-pt-repeat-hyphen-hyphenate-true-with-
 e2c28abda075f98a1be7605f762b4291 image-jump-to-next-page
 d5b82ccc0620406d9547ed5e40bc1ec9 image-jxl-alpha
 7397826347e53c9767a01f488fd03a79 image-jxl-animated
+7920bb6e4fa0f49adb36f91800a72ea9 image-jxl-bad-jpeg-reconstruction-data
 6644c7e347b783162b5082180dcf5d98 image-jxl-detect-format
 4f9d26bcb7a250dfd97b14ab00d037c8 image-jxl-gray
 bca04540a3cc663c3deba0a01f9e1a42 image-jxl-hdr

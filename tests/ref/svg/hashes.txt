@@ -638,6 +638,7 @@ f84a90a3c38898ed90253f356fd88fc7 image-decode-specify-format
 11a920086a593d17a221a3b53410b313 image-jump-to-next-page
 e7cbf914c9ea3fc830a8818905622ae4 image-jxl-alpha
 378ab55e6eca822b132ab1778a4eaeab image-jxl-animated
+31b9ce4706b1c188878e465d4a5a271f image-jxl-bad-jpeg-reconstruction-data
 823c9590c9796ba6de66df66ef90e751 image-jxl-detect-format
 d024e1fb69628c5a36ab7350852b675c image-jxl-gray
 f997e5da2ec4be99b50cdaeb4aa4e74a image-jxl-hdr

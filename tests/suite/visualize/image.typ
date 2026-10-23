@@ -587,3 +587,9 @@ A #box(image("/assets/images/tiger.jpg", height: 1cm, width: 80%)) B
 #let corrupted = data.slice(0, 40) + bytes((0xff, 0x00, 0xaa, 0x55)) + data.slice(44)
 // Error: 2-18 failed to decode image (frame error: modular stream error: entropy decoder error: distribution cluster has a hole; expected 8, actual 5)
 #image(corrupted)
+
+--- image-jxl-bad-jpeg-reconstruction-data paged ---
+// A JPEG XL file with malformed JPEG reconstruction data (found by fuzzing,
+// it made the reconstruction in jxl-oxide panic). The reconstruction data is
+// not needed for decoding, so this works.
+#image("/tests/jxl-assets/bad-jbrd.jxl")
