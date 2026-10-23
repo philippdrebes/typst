@@ -509,9 +509,9 @@ impl<'a> ImageResolver<'a> {
                                 ExchangeFormat::Webp => {
                                     Ok(usvg::ImageKind::WEBP(arc_data))
                                 }
-                                ExchangeFormat::Jxl => {
-                                    Ok(usvg::ImageKind::PNG(jxl_to_png(&arc_data)?))
-                                }
+                                ExchangeFormat::Jxl => Ok(usvg::ImageKind::PNG(
+                                    Arc::new(jxl_to_png(&arc_data)?),
+                                )),
                             }
                         }
                         RasterFormat::Pixel(_) => {
@@ -537,7 +537,7 @@ impl<'a> ImageResolver<'a> {
 }
 
 /// Converts a JPEG XL image to PNG, since usvg can't decode JPEG XL.
-fn jxl_to_png(data: &[u8]) -> StrResult<Arc<Vec<u8>>> {
+fn jxl_to_png(data: &[u8]) -> StrResult<Vec<u8>> {
     let raster = RasterImage::plain(Bytes::new(data.to_vec()), ExchangeFormat::Jxl)?;
     let mut buf = vec![];
     let mut encoder = PngEncoder::new(&mut buf);
@@ -548,5 +548,5 @@ fn jxl_to_png(data: &[u8]) -> StrResult<Arc<Vec<u8>>> {
         .dynamic()
         .write_with_encoder(encoder)
         .map_err(|err| eco_format!("failed to encode image as PNG ({err})"))?;
-    Ok(Arc::new(buf))
+    Ok(buf)
 }
