@@ -3542,7 +3542,6 @@ name = "typst-fuzz"
 version = "0.15.1"
 dependencies = [
  "comemo",
- "jxl-oxide",
  "libfuzzer-sys",
  "typst",
  "typst-assets",
@@ -3760,7 +3759,6 @@ dependencies = [
  "image",
  "indexmap",
  "infer",
- "jxl-oxide",
  "krilla",
  "krilla-svg",
  "rustc-hash",
